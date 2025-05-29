@@ -41,3 +41,6 @@ glmmTMB/.gitsum
 *.tgz
 *.zip
 *.dll
+Bball1.txt
+hetar1_debug.R
+.vscode

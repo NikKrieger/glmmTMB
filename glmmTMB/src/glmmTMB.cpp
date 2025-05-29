@@ -436,16 +436,18 @@ Type termwise_nll(array<Type> &U, vector<Type> theta, per_term_info<Type>& term,
     
     term.sd = sd;             // For report
   }
-  else if (term.blockCode == cs_covstruct || term.blockCode == homcs_covstruct) {
-    // case: cs_covstruct
+  else if (term.blockCode == cs_covstruct ||
+           term.blockCode == hetar1_covstruct ||
+           term.blockCode == homcs_covstruct) {
+    // case: cs_covstruct, hetar1_covstruct, or homcs_covstruct
     int n = term.blockSize;
-    int nsd = (term.blockCode == cs_covstruct ? n : 1);
+    int nsd = (term.blockCode == homcs_covstruct ? 1 : n);
     vector<Type> logsd(n);
     for (int i = 0; i < n; i++) {
-      if (term.blockCode == cs_covstruct) {
-        logsd(i) = theta(i);
-      } else {
+      if (term.blockCode == homcs_covstruct) {
         logsd(i) = theta(0);
+      } else {
+        logsd(i) = theta(i);
       }
     }
     Type corr_transf = theta(nsd);
@@ -455,13 +457,18 @@ Type termwise_nll(array<Type> &U, vector<Type> theta, per_term_info<Type>& term,
     matrix<Type> corr(n,n);
     for(int i=0; i<n; i++)
       for(int j=0; j<n; j++)
-        corr(i,j) = (i==j ? Type(1) : rho);
+        if (term.blockCode == hetar1_covstruct) {
+          corr(i,j) = pow(rho, abs(i - j));
+        } else {
+          corr(i,j) = (i==j ? Type(1) : rho);
+        }
     density::MVNORM_t<Type> nldens(corr);
     density::VECSCALE_t<density::MVNORM_t<Type> > scnldens = density::VECSCALE(nldens, sd);
     for(int i = 0; i < term.blockReps; i++){
       ans += scnldens(U.col(i));
       if (do_simulate) {
         if (term.simCode != random_simcode) {
+          // It is unclear whether this applies to hetar1_covstruct:
           Rf_error("simcode not yet implemented for cs cov struct");
         }
         U.col(i) = sd * nldens.simulate();
@@ -496,8 +503,7 @@ Type termwise_nll(array<Type> &U, vector<Type> theta, per_term_info<Type>& term,
     SET_COR;
     term.sd = sd;             // For report
   }
-  else if (term.blockCode == ar1_covstruct ||
-	   term.blockCode == hetar1_covstruct) {
+  else if (term.blockCode == ar1_covstruct) {
     // case: ar1_covstruct
     //  * NOTE: Valid parameter space is phi in [-1, 1]
     //  * NOTE: 'times' not used as we assume unit distance between consecutive time points.
@@ -522,11 +528,11 @@ Type termwise_nll(array<Type> &U, vector<Type> theta, per_term_info<Type>& term,
         }
       }
       for(int i=1; i<n; i++){
-        if (term.blockCode == hetar1_covstruct) {
+        /* if (term.blockCode == hetar1_covstruct) {
           cursd = sd(i-1);
-        } else {
-          cursd = sd(0);
-        }
+        } else { */
+        cursd = sd(0);
+        //}
       ans -= dnorm(U(i, j), phi * U(i-1, j), cursd * sqrt(1 - phi*phi), true);
         if (do_simulate) {
 	  switch(term.simCode) {
@@ -561,17 +567,17 @@ Type termwise_nll(array<Type> &U, vector<Type> theta, per_term_info<Type>& term,
           }
         }
       }
-      if (term.blockCode == hetar1_covstruct) {
+      /* if (term.blockCode == hetar1_covstruct) {
         term.sd.resize(n);
         for(int i=0; i<n; i++){
           term.sd(i) = sd(i);
         }
-      } else {
+      } else { */
         term.sd.resize(1);
         term.sd(0) = sd(0);
-      }
+      // }
     } // DISABLE_AD
-  } // [het]ar1_covstruct
+  } // ar1_covstruct
   else if (term.blockCode == ou_covstruct){
     // case: ou_covstruct
     //  * NOTE: this is the continuous time version of ar1.
